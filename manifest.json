@@ -3,22 +3,16 @@
   "name": "NetAcad Scraper",
   "version": "1.0",
   "description": "Scrapes questions and answers from NetAcad and uses AI to suggest answers.",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage"
-  ],
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://itexamanswers.net/*"],
   "content_scripts": [
     {
       "matches": [
-        "*://*.netacad.com/*"
+        "*://*.netacad.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ],
-      "js": [
-        "api.js",
-        "ui.js",
-        "scraper.js",
-        "content.js"
-      ],
+      "js": ["answers.js", "api.js", "ui.js", "scraper.js", "content.js"],
       "all_frames": true
     }
   ],

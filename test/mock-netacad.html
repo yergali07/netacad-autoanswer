@@ -1,0 +1,1741 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock NetAcad — extension test harness</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 820px;
+        margin: 24px auto;
+        padding: 0 16px;
+        color: #222;
+      }
+      h1 {
+        font-size: 18px;
+      }
+      .note {
+        color: #666;
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+      .quiz-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 8px 0 16px;
+        padding: 8px;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        background: #fafafa;
+      }
+      .quiz-nav button {
+        min-width: 32px;
+        padding: 4px 8px;
+        border: 1px solid #d0d0d0;
+        background: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+      }
+      .quiz-nav button:hover {
+        background: #eef6ff;
+      }
+      .quiz-nav button.current {
+        background: #5cb85c;
+        color: #fff;
+        border-color: #4a934a;
+        font-weight: 600;
+      }
+      .quiz-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 16px 0;
+        padding: 8px 12px;
+        border-top: 1px solid #eee;
+      }
+      .quiz-footer .counter {
+        color: #666;
+        font-size: 13px;
+      }
+      .quiz-footer button {
+        padding: 6px 14px;
+        border: 1px solid #ccc;
+        background: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .quiz-footer button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mock NetAcad page</h1>
+    <p class="note">
+      Reproduces the shadow-DOM chain the extension walks:
+      <code
+        >app-root → page-view → article-view → block-view → mcq-view →
+        base-view</code
+      >. Load the extension, open this file via a local server (or
+      <code>file://</code> if the extension's manifest allows it), and you
+      should see the matching option subtly highlighted.
+    </p>
+    <nav class="quiz-nav" id="quizNav" aria-label="Question navigation"></nav>
+    <app-root></app-root>
+    <div class="quiz-footer">
+      <button id="prevBtn">← Previous</button>
+      <span class="counter" id="counter"></span>
+      <button id="nextBtn">Next →</button>
+    </div>
+
+    <script>
+      // Each entry becomes one question.
+      const SAMPLE_QUESTIONS = [
+              {
+                      "prompt": "Which statement describes a difference between the Cisco ASA IOS CLI feature and the router IOS CLI feature?",
+                      "options": [
+                              "ASA uses the ? command whereas a router uses the help command to receive help on a brief description and the syntax of a command.",
+                              "To use a show command in a general configuration mode, ASA can use the command directly whereas a router will need to enter the do command before issuing the show command.",
+                              "To complete a partially typed command, ASA uses the Ctrl+Tab key combination whereas a router uses the Tab key.",
+                              "To indicate the CLI EXEC mode, ASA uses the % symbol whereas a router uses the # symbol."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. A network administrator is configuring AAA implementation on an ASA device. What does the option link3 indicate?",
+                      "options": [
+                              "the network name where the AAA server resides",
+                              "the specific AAA server name",
+                              "the sequence of servers in the AAA server group",
+                              "the interface name"
+                      ]
+              },
+              {
+                      "prompt": "What provides both secure segmentation and threat defense in a Secure Data Center solution?",
+                      "options": [
+                              "Cisco Security Manager software",
+                              "AAA server",
+                              "Adaptive Security Appliance",
+                              "intrusion prevention system"
+                      ]
+              },
+              {
+                      "prompt": "What are the three core components of the Cisco Secure Data Center solution? (Choose three.)",
+                      "options": [
+                              "mesh network",
+                              "secure segmentation",
+                              "visibility",
+                              "threat defense",
+                              "servers",
+                              "infrastructure"
+                      ]
+              },
+              {
+                      "prompt": "What are three characteristics of ASA transparent mode? (Choose three.)",
+                      "options": [
+                              "This mode does not support VPNs, QoS, or DHCP Relay.",
+                              "It is the traditional firewall deployment mode.",
+                              "This mode is referred to as a “bump in the wire.”",
+                              "NAT can be implemented between connected networks.",
+                              "In this mode the ASA is invisible to an attacker.",
+                              "The interfaces of the ASA separate Layer 3 networks and require IP addresses in different subnets."
+                      ]
+              },
+              {
+                      "prompt": "What is needed to allow specific traffic that is sourced on the outside network of an ASA firewall to reach an internal network?",
+                      "options": [
+                              "ACL",
+                              "NAT",
+                              "dynamic routing protocols",
+                              "outside security zone level 0"
+                      ]
+              },
+              {
+                      "prompt": "What will be the result of failed login attempts if the following command is entered into a router?",
+                      "options": [
+                              "All login attempts will be blocked for 150 seconds if there are 4 failed attempts within 90 seconds.",
+                              "All login attempts will be blocked for 90 seconds if there are 4 failed attempts within 150 seconds.",
+                              "All login attempts will be blocked for 1.5 hours if there are 4 failed attempts within 150 seconds.",
+                              "All login attempts will be blocked for 4 hours if there are 90 failed attempts within 150 seconds."
+                      ]
+              },
+              {
+                      "prompt": "Which two tasks are associated with router hardening? (Choose two.)",
+                      "options": [
+                              "placing the router in a secure room",
+                              "disabling unused ports and interfaces",
+                              "installing the maximum amount of memory possible",
+                              "securing administrative access",
+                              "using uninterruptible power supplies"
+                      ]
+              },
+              {
+                      "prompt": "Which threat protection capability is provided by Cisco ESA?",
+                      "options": [
+                              "web filtering",
+                              "cloud access security",
+                              "spam protection",
+                              "Layer 4 traffic monitoring"
+                      ]
+              },
+              {
+                      "prompt": "What are two security measures used to protect endpoints in the borderless network? (Choose two.)",
+                      "options": [
+                              "denylisting",
+                              "Snort IPS",
+                              "DLP",
+                              "DMZ",
+                              "rootkit"
+                      ]
+              },
+              {
+                      "prompt": "Which three types of traffic are allowed when the authentication port-control auto command has been issued and the client has not yet been authenticated? (Choose three.)",
+                      "options": [
+                              "CDP",
+                              "802.1Q",
+                              "IPsec",
+                              "TACACS+",
+                              "STP",
+                              "EAPOL"
+                      ]
+              },
+              {
+                      "prompt": "Which statement describes a characteristic of the IKE protocol?",
+                      "options": [
+                              "It uses UDP port 500 to exchange IKE information between the security gateways.",
+                              "IKE Phase 1 can be implemented in three different modes: main, aggressive, or quick.",
+                              "It allows for the transmission of keys directly across a network.",
+                              "The purpose of IKE Phase 2 is to negotiate a security association between two IKE peers."
+                      ]
+              },
+              {
+                      "prompt": "Which action do IPsec peers take during the IKE Phase 2 exchange?",
+                      "options": [
+                              "exchange of DH keys",
+                              "negotiation of IPsec policy",
+                              "negotiation of IKE policy sets",
+                              "verification of peer identity"
+                      ]
+              },
+              {
+                      "prompt": "What are two hashing algorithms used with IPsec AH to guarantee authenticity? (Choose two.)",
+                      "options": [
+                              "SHA",
+                              "RSA",
+                              "DH",
+                              "MD5",
+                              "AES"
+                      ]
+              },
+              {
+                      "prompt": "Which command raises the privilege level of the ping command to 7?",
+                      "options": [
+                              "user exec ping level 7",
+                              "authorization exec ping level 7",
+                              "accounting exec level 7 ping",
+                              "privilege exec level 7 ping"
+                      ]
+              },
+              {
+                      "prompt": "What is a characteristic of a role-based CLI view of router configuration?",
+                      "options": [
+                              "A CLI view has a command hierarchy, with higher and lower views.",
+                              "When a superview is deleted, the associated CLI views are deleted.​",
+                              "A single CLI view can be shared within multiple superviews.",
+                              "Only a superview user can configure a new view and add or remove commands from the existing views.​"
+                      ]
+              },
+              {
+                      "prompt": "What is a limitation to using OOB management on a large enterprise network?",
+                      "options": [
+                              "Production traffic shares the network with management traffic.",
+                              "Terminal servers can have direct console connections to user devices needing management.",
+                              "OOB management requires the creation of VPNs.",
+                              "All devices appear to be attached to a single management network."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. A corporate network is using NTP to synchronize the time across devices. What can be determined from the displayed output?",
+                      "options": [
+                              "Router03 is a stratum 2 device that can provide NTP service to other devices in the network.",
+                              "The time on Router03 may not be reliable because it is offset by more than 7 seconds to the time server.",
+                              "The interface on Router03 that connects to the time sever has the IPv4 address 209.165.200.225.",
+                              "Router03 time is synchronized to a stratum 2 time server."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Which two conclusions can be drawn from the syslog message that was generated by the router? (Choose two.)",
+                      "options": [
+                              "This message resulted from an unusual error requiring reconfiguration of the interface.",
+                              "This message indicates that service timestamps have been configured.",
+                              "This message indicates that the interface changed state five times.",
+                              "This message is a level 5 notification message.",
+                              "This message indicates that the interface should be replaced."
+                      ]
+              },
+              {
+                      "prompt": "Which two types of hackers are typically classified as grey hat hackers? (Choose two.)",
+                      "options": [
+                              "hacktivists",
+                              "cyber criminals",
+                              "vulnerability brokers",
+                              "script kiddies",
+                              "state-sponsored hackers"
+                      ]
+              },
+              {
+                      "prompt": "When describing malware, what is a difference between a virus and a worm?",
+                      "options": [
+                              "A virus focuses on gaining privileged access to a device, whereas a worm does not.",
+                              "A virus replicates itself by attaching to another file, whereas a worm can replicate itself independently.",
+                              "A virus can be used to launch a DoS attack (but not a DDoS), but a worm can be used to launch both DoS and DDoS attacks.",
+                              "A virus can be used to deliver advertisements without user consent, whereas a worm cannot."
+                      ]
+              },
+              {
+                      "prompt": "Which type of packet is unable to be filtered by an outbound ACL?",
+                      "options": [
+                              "multicast packet",
+                              "ICMP packet",
+                              "broadcast packet",
+                              "router-generated packet"
+                      ]
+              },
+              {
+                      "prompt": "Consider the access list command applied outbound on a router serial interface.",
+                      "options": [
+                              "The only traffic denied is echo-replies sourced from the 192.168.10.0/24 network. All other traffic is allowed.",
+                              "The only traffic denied is ICMP-based traffic. All other traffic is allowed.",
+                              "No traffic will be allowed outbound on the serial interface.",
+                              "Users on the 192.168.10.0/24 network are not allowed to transmit traffic to any other destination."
+                      ]
+              },
+              {
+                      "prompt": "Which command is used to activate an IPv6 ACL named ENG_ACL on an interface so that the router filters traffic prior to accessing the routing table?",
+                      "options": [
+                              "ipv6 access-class ENG_ACL in",
+                              "ipv6 traffic-filter ENG_ACL out",
+                              "ipv6 traffic-filter ENG_ACL in",
+                              "ipv6 access-class ENG_ACL out"
+                      ]
+              },
+              {
+                      "prompt": "What technology has a function of using trusted third-party protocols to issue credentials that are accepted as an authoritative identity?",
+                      "options": [
+                              "digital signatures",
+                              "hashing algorithms",
+                              "PKI certificates",
+                              "symmetric keys"
+                      ]
+              },
+              {
+                      "prompt": "What are two methods to maintain certificate revocation status? (Choose two.)",
+                      "options": [
+                              "subordinate CA",
+                              "OCSP",
+                              "DNS",
+                              "LDAP",
+                              "CRL"
+                      ]
+              },
+              {
+                      "prompt": "Which protocol is an IETF standard that defines the PKI digital certificate format?",
+                      "options": [
+                              "SSL/TLS",
+                              "X.500",
+                              "LDAP",
+                              "X.509"
+                      ]
+              },
+              {
+                      "prompt": "A network administrator is configuring DAI on a switch. Which command should be used on the uplink interface that connects to a router?",
+                      "options": [
+                              "ip arp inspection trust",
+                              "ip dhcp snooping",
+                              "ip arp inspection vlan",
+                              "spanning-tree portfast"
+                      ]
+              },
+              {
+                      "prompt": "What is the best way to prevent a VLAN hopping attack?",
+                      "options": [
+                              "Disable trunk negotiation for trunk ports and statically set nontrunk ports as access ports.",
+                              "Disable STP on all nontrunk ports.",
+                              "Use VLAN 1 as the native VLAN on trunk ports.",
+                              "Use ISL encapsulation on all trunk links."
+                      ]
+              },
+              {
+                      "prompt": "What would be the primary reason an attacker would launch a MAC address overflow attack?",
+                      "options": [
+                              "so that the switch stops forwarding traffic",
+                              "so that legitimate hosts cannot obtain a MAC address",
+                              "so that the attacker can see frames that are destined for other hosts",
+                              "so that the attacker can execute arbitrary code on the switch"
+                      ]
+              },
+              {
+                      "prompt": "What is the main difference between the implementation of IDS and IPS devices?",
+                      "options": [
+                              "An IDS can negatively impact the packet flow, whereas an IPS can not.",
+                              "An IDS needs to be deployed together with a firewall device, whereas an IPS can replace a firewall.",
+                              "An IDS would allow malicious traffic to pass before it is addressed, whereas an IPS stops it immediately.",
+                              "An IDS uses signature-based technology to detect malicious packets, whereas an IPS uses profile-based technology."
+                      ]
+              },
+              {
+                      "prompt": "Which attack is defined as an attempt to exploit software vulnerabilities that are unknown or undisclosed by the vendor?",
+                      "options": [
+                              "zero-day",
+                              "Trojan horse",
+                              "brute-force",
+                              "man-in-the-middle"
+                      ]
+              },
+              {
+                      "prompt": "What are the three signature levels provided by Snort IPS on the 4000 Series ISR? (Choose three.)",
+                      "options": [
+                              "security",
+                              "drop",
+                              "reject",
+                              "connectivity",
+                              "inspect",
+                              "balanced"
+                      ]
+              },
+              {
+                      "prompt": "What are three attributes of IPS signatures? (Choose three.)",
+                      "options": [
+                              "action",
+                              "length",
+                              "trigger",
+                              "type",
+                              "depth",
+                              "function"
+                      ]
+              },
+              {
+                      "prompt": "Which two features are included by both TACACS+ and RADIUS protocols? (Choose two.)",
+                      "options": [
+                              "SIP support",
+                              "password encryption",
+                              "802.1X support",
+                              "separate authentication and authorization processes",
+                              "utilization of transport layer protocols"
+                      ]
+              },
+              {
+                      "prompt": "What function is provided by the RADIUS protocol?",
+                      "options": [
+                              "RADIUS provides encryption of the complete packet during transfer.",
+                              "RADIUS provides separate AAA services.",
+                              "RADIUS provides separate ports for authorization and accounting.",
+                              "RADIUS provides secure communication using TCP port 49."
+                      ]
+              },
+              {
+                      "prompt": "What are three characteristics of the RADIUS protocol? (Choose three.)",
+                      "options": [
+                              "utilizes TCP port 49",
+                              "uses UDP ports for authentication and accounting",
+                              "supports 802.1X and SIP",
+                              "separates the authentication and authorization processes",
+                              "encrypts the entire body of the packet",
+                              "is an open RFC standard AAA protocol"
+                      ]
+              },
+              {
+                      "prompt": "Which zone-based policy firewall zone is system-defined and applies to traffic destined for the router or originating from the router?",
+                      "options": [
+                              "local zone",
+                              "inside zone",
+                              "self zone",
+                              "system zone",
+                              "outside zone"
+                      ]
+              },
+              {
+                      "prompt": "What are two benefits of using a ZPF rather than a Classic Firewall? (Choose two.)",
+                      "options": [
+                              "ZPF allows interfaces to be placed into zones for IP inspection.",
+                              "The ZPF is not dependent on ACLs.",
+                              "Multiple inspection actions are used with ZPF.",
+                              "ZPF policies are easy to read and troubleshoot.",
+                              "With ZPF, the router will allow packets unless they are explicitly blocked."
+                      ]
+              },
+              {
+                      "prompt": "How does a firewall handle traffic when it is originating from the private network and traveling to the DMZ network?",
+                      "options": [
+                              "The traffic is selectively denied based on service requirements.",
+                              "The traffic is usually permitted with little or no restrictions.",
+                              "The traffic is selectively permitted and inspected.",
+                              "The traffic is usually blocked."
+                      ]
+              },
+              {
+                      "prompt": "Which two protocols generate connection information within a state table and are supported for stateful filtering? (Choose two.)",
+                      "options": [
+                              "ICMP",
+                              "UDP",
+                              "DHCP",
+                              "TCP",
+                              "HTTP"
+                      ]
+              },
+              {
+                      "prompt": "Which type of firewall is supported by most routers and is the easiest to implement?",
+                      "options": [
+                              "next generation firewall",
+                              "stateless firewall",
+                              "stateful firewall",
+                              "proxy firewall"
+                      ]
+              },
+              {
+                      "prompt": "What network testing tool would an administrator use to assess and validate system configurations against security policies and compliance standards?",
+                      "options": [
+                              "Tripwire",
+                              "L0phtcrack",
+                              "Nessus",
+                              "Metasploit"
+                      ]
+              },
+              {
+                      "prompt": "What type of network security test can detect and report changes made to network systems?",
+                      "options": [
+                              "vulnerability scanning",
+                              "network scanning",
+                              "integrity checking",
+                              "penetration testing"
+                      ]
+              },
+              {
+                      "prompt": "What network security testing tool has the ability to provide details on the source of suspicious network activity?",
+                      "options": [
+                              "SIEM",
+                              "SuperScan",
+                              "Zenmap",
+                              "Tripwire"
+                      ]
+              },
+              {
+                      "prompt": "How does a Caesar cipher work on a message?",
+                      "options": [
+                              "Letters of the message are replaced by another letter that is a set number of places away in the alphabet.",
+                              "Letters of the message are rearranged randomly.",
+                              "Letters of the message are rearranged based on a predetermined pattern.",
+                              "Words of the message are substituted based on a predetermined pattern."
+                      ]
+              },
+              {
+                      "prompt": "What is the main factor that ensures the security of encryption of modern algorithms?",
+                      "options": [
+                              "complexity of the hashing algorithm",
+                              "the use of 3DES over AES",
+                              "secrecy of the keys",
+                              "secrecy of the algorithm"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. What algorithm will be used for providing confidentiality?",
+                      "options": [
+                              "RSA",
+                              "Diffie-Hellman",
+                              "DES",
+                              "AES"
+                      ]
+              },
+              {
+                      "prompt": "After issuing a show run command, an analyst notices the following command:",
+                      "options": [
+                              "It establishes the set of encryption and hashing algorithms used to secure the data sent through an IPsec tunnel.",
+                              "It defines the default ISAKMP policy list used to establish the IKE Phase 1 tunnel.",
+                              "It establishes the criteria to force the IKE Phase 1 negotiations to begin.",
+                              "It indicates that IKE will be used to establish the IPsec tunnel for protecting the traffic."
+                      ]
+              },
+              {
+                      "prompt": "Which algorithm can ensure data integrity?",
+                      "options": [
+                              "RSA",
+                              "AES",
+                              "MD5",
+                              "PKI"
+                      ]
+              },
+              {
+                      "prompt": "A company implements a security policy that ensures that a file sent from the headquarters office to the branch office can only be opened with a predetermined code. This code is changed every day. Which two algorithms can be used to achieve this task? (Choose two.)",
+                      "options": [
+                              "HMAC",
+                              "MD5",
+                              "3DES",
+                              "SHA-1",
+                              "AES"
+                      ]
+              },
+              {
+                      "prompt": "A network technician has been asked to design a virtual private network between two branch routers. Which type of cryptographic key should be used in this scenario?",
+                      "options": [
+                              "hash key",
+                              "symmetric key",
+                              "asymmetric key",
+                              "digital signature"
+                      ]
+              },
+              {
+                      "prompt": "Which two options can limit the information discovered from port scanning? (Choose two.)",
+                      "options": [
+                              "intrusion prevention system",
+                              "firewall",
+                              "authentication",
+                              "passwords",
+                              "encryption"
+                      ]
+              },
+              {
+                      "prompt": "An administrator discovers that a user is accessing a newly established website that may be detrimental to company security. What action should the administrator take first in terms of the security policy?",
+                      "options": [
+                              "Ask the user to stop immediately and inform the user that this constitutes grounds for dismissal.",
+                              "Create a firewall rule blocking the respective website.",
+                              "Revise the AUP immediately and get all users to sign the updated AUP.",
+                              "Immediately suspend the network privileges of the user."
+                      ]
+              },
+              {
+                      "prompt": "If AAA is already enabled, which three CLI steps are required to configure a router with a specific view? (Choose three.)",
+                      "options": [
+                              "Create a superview using the parser view view-name command.",
+                              "Associate the view with the root view.",
+                              "Assign users who can use the view.",
+                              "Create a view using the parser viewcommand.",
+                              "Assign a secret password to the view.",
+                              "Assign commands to the view."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. A network administrator configures a named ACL on the router. Why is there no output displayed when the show command is issued?",
+                      "options": [
+                              "The ACL is not activated.",
+                              "The ACL name is case sensitive.",
+                              "The ACL has not been applied to an interface.",
+                              "No packets have matched the ACL statements yet."
+                      ]
+              },
+              {
+                      "prompt": "ACLs are used primarily to filter traffic. What are two additional uses of ACLs? (Choose two.):",
+                      "options": [
+                              "specifying internal hosts for NAT",
+                              "identifying traffic for QoS",
+                              "specifying source addresses for authentication",
+                              "reorganizing traffic into VLANs",
+                              "filtering VTP packets"
+                      ]
+              },
+              {
+                      "prompt": "What two features are added in SNMPv3 to address the weaknesses of previous versions of SNMP? (Choose two.)",
+                      "options": [
+                              "authentication",
+                              "authorization with community string priority",
+                              "bulk MIB objects retrieval",
+                              "ACL management filtering",
+                              "encryption"
+                      ]
+              },
+              {
+                      "prompt": "What network testing tool is used for password auditing and recovery?",
+                      "options": [
+                              "Nessus",
+                              "Metasploit",
+                              "L0phtcrack",
+                              "SuperScan"
+                      ]
+              },
+              {
+                      "prompt": "Which type of firewall makes use of a server to connect to destination devices on behalf of clients?",
+                      "options": [
+                              "packet filtering firewall",
+                              "proxy firewall",
+                              "stateless firewall",
+                              "stateful firewall"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. What will be displayed in the output of the show running-config object command after the exhibited configuration commands are entered on an ASA 5506-X?",
+                      "options": [
+                              "host 192.168.1.4",
+                              "range 192.168.1.10 192.168.1.20",
+                              "host 192.168.1.3, host 192.168.1.4, and range 192.168.1.10 192.168.1.20",
+                              "host 192.168.1.3",
+                              "host 192.168.1.3 and host 192.168.1.4",
+                              "host 192.168.1.4 and range 192.168.1.10 192.168.1.20"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. According to the command output, which three statements are true about the DHCP options entered on the ASA? (Choose three.)",
+                      "options": [
+                              "The dhcpd address [ start-of-pool ]-[ end-of-pool ] inside command was issued to enable the DHCP server.",
+                              "The dhcpd address [ start-of-pool ]-[ end-of-pool ] inside command was issued to enable the DHCP client.",
+                              "The dhcpd enable inside command was issued to enable the DHCP server.",
+                              "The dhcpd auto-config outside command was issued to enable the DHCP client.",
+                              "The dhcpd auto-config outside command was issued to enable the DHCP server.",
+                              "The dhcpd enable inside command was issued to enable the DHCP client."
+                      ]
+              },
+              {
+                      "prompt": "Which two statements describe the characteristics of symmetric algorithms? (Choose two.)",
+                      "options": [
+                              "They are commonly used with VPN traffic.",
+                              "They use a pair of a public key and a private key.",
+                              "They are commonly implemented in the SSL and SSH protocols.",
+                              "They provide confidentiality, integrity, and availability.",
+                              "They are referred to as a pre-shared key or secret key."
+                      ]
+              },
+              {
+                      "prompt": "A web server administrator is configuring access settings to require users to authenticate first before accessing certain web pages. Which requirement of information security is addressed through the configuration?",
+                      "options": [
+                              "availability",
+                              "integrity",
+                              "scalability",
+                              "confidentiality"
+                      ]
+              },
+              {
+                      "prompt": "The use of 3DES within the IPsec framework is an example of which of the five IPsec building blocks?",
+                      "options": [
+                              "authentication",
+                              "nonrepudiation",
+                              "integrity",
+                              "Diffie-Hellman",
+                              "confidentiality"
+                      ]
+              },
+              {
+                      "prompt": "What function is provided by Snort as part of the Security Onion?",
+                      "options": [
+                              "to generate network intrusion alerts by the use of rules and signatures",
+                              "to normalize logs from various NSM data logs so they can be represented, stored, and accessed through a common schema",
+                              "to display full-packet captures for analysis",
+                              "to view pcap transcripts generated by intrusion detection tools"
+                      ]
+              },
+              {
+                      "prompt": "What are two drawbacks to using HIPS? (Choose two.)",
+                      "options": [
+                              "With HIPS, the success or failure of an attack cannot be readily determined.",
+                              "With HIPS, the network administrator must verify support for all the different operating systems used in the network.",
+                              "HIPS has difficulty constructing an accurate network picture or coordinating events that occur across the entire network.",
+                              "If the network traffic stream is encrypted, HIPS is unable to access unencrypted forms of the traffic.",
+                              "HIPS installations are vulnerable to fragmentation attacks or variable TTL attacks."
+                      ]
+              },
+              {
+                      "prompt": "In an AAA-enabled network, a user issues the configure terminal command from the privileged executive mode of operation. What AAA function is at work if this command is rejected?",
+                      "options": [
+                              "authorization",
+                              "authentication",
+                              "auditing",
+                              "accounting"
+                      ]
+              },
+              {
+                      "prompt": "A company has a file server that shares a folder named Public. The network security policy specifies that the Public folder is assigned Read-Only rights to anyone who can log into the server while the Edit rights are assigned only to the network admin group. Which component is addressed in the AAA network service framework?",
+                      "options": [
+                              "automation",
+                              "accounting",
+                              "authentication",
+                              "authorization"
+                      ]
+              },
+              {
+                      "prompt": "What is a characteristic of a DMZ zone?",
+                      "options": [
+                              "Traffic originating from the inside network going to the DMZ network is not permitted.",
+                              "Traffic originating from the outside network going to the DMZ network is selectively permitted.",
+                              "Traffic originating from the DMZ network going to the inside network is permitted.",
+                              "Traffic originating from the inside network going to the DMZ network is selectively permitted."
+                      ]
+              },
+              {
+                      "prompt": "Which measure can a security analyst take to perform effective security monitoring against network traffic encrypted by SSL technology?",
+                      "options": [
+                              "Use a Syslog server to capture network traffic.",
+                              "Deploy a Cisco SSL Appliance.",
+                              "Require remote access connections through IPsec VPN.",
+                              "Deploy a Cisco ASA."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Port security has been configured on the Fa 0/12 interface of switch S1. What action will occur when PC1 is attached to switch S1 with the applied configuration?",
+                      "options": [
+                              "Frames from PC1 will be forwarded since the switchport port-security violation command is missing.",
+                              "Frames from PC1 will be forwarded to its destination, and a log entry will be created.",
+                              "Frames from PC1 will be forwarded to its destination, but a log entry will not be created.",
+                              "Frames from PC1 will cause the interface to shut down immediately, and a log entry will be made.",
+                              "Frames from PC1 will be dropped, and there will be no log of the violation.",
+                              "Frames from PC1 will be dropped, and a log message will be created."
+                      ]
+              },
+              {
+                      "prompt": "What security countermeasure is effective for preventing CAM table overflow attacks?",
+                      "options": [
+                              "DHCP snooping",
+                              "Dynamic ARP Inspection",
+                              "IP source guard",
+                              "port security"
+                      ]
+              },
+              {
+                      "prompt": "What are two examples of DoS attacks? (Choose two.)",
+                      "options": [
+                              "port scanning",
+                              "SQL injection",
+                              "ping of death",
+                              "phishing",
+                              "buffer overflow"
+                      ]
+              },
+              {
+                      "prompt": "Which method is used to identify interesting traffic needed to create an IKE phase 1 tunnel?",
+                      "options": [
+                              "transform sets",
+                              "a permit access list entry",
+                              "hashing algorithms",
+                              "a security association"
+                      ]
+              },
+              {
+                      "prompt": "When the CLI is used to configure an ISR for a site-to-site VPN connection, which two items must be specified to enable a crypto map policy? (Choose two.)",
+                      "options": [
+                              "the hash",
+                              "the peer",
+                              "encryption",
+                              "the ISAKMP policy",
+                              "a valid access list",
+                              "IP addresses on all active interfaces",
+                              "the IKE Phase 1 policy"
+                      ]
+              },
+              {
+                      "prompt": "How does a firewall handle traffic when it is originating from the public network and traveling to the DMZ network?",
+                      "options": [
+                              "Traffic that is originating from the public network is inspected and selectively permitted when traveling to the DMZ network.",
+                              "Traffic that is originating from the public network is usually permitted with little or no restriction when traveling to the DMZ network.",
+                              "Traffic that is originating from the public network is usually forwarded without inspection when traveling to the DMZ network.",
+                              "Traffic that is originating from the public network is usually blocked when traveling to the DMZ network."
+                      ]
+              },
+              {
+                      "prompt": "A client connects to a Web server. Which component of this HTTP connection is not examined by a stateful firewall?",
+                      "options": [
+                              "the source IP address of the client traffic",
+                              "the destination port number of the client traffic",
+                              "the actual contents of the HTTP connection",
+                              "the source port number of the client traffic"
+                      ]
+              },
+              {
+                      "prompt": "Which network monitoring technology uses VLANs to monitor traffic on remote switches?",
+                      "options": [
+                              "IPS",
+                              "IDS",
+                              "TAP",
+                              "RSPAN"
+                      ]
+              },
+              {
+                      "prompt": "Which rule action will cause Snort IPS to block and log a packet?",
+                      "options": [
+                              "log",
+                              "drop",
+                              "alert",
+                              "Sdrop"
+                      ]
+              },
+              {
+                      "prompt": "What is typically used to create a security trap in the data center facility?",
+                      "options": [
+                              "IDs, biometrics, and two access doors",
+                              "high resolution monitors",
+                              "redundant authentication servers",
+                              "a server without all security patches applied"
+                      ]
+              },
+              {
+                      "prompt": "A company is concerned with leaked and stolen corporate data on hard copies. Which data loss mitigation technique could help with this situation?",
+                      "options": [
+                              "strong PC security settings",
+                              "strong passwords",
+                              "shredding",
+                              "encryption"
+                      ]
+              },
+              {
+                      "prompt": "Upon completion of a network security course, a student decides to pursue a career in cryptanalysis. What job would the student be doing as a cryptanalyst?",
+                      "options": [
+                              "cracking code without access to the shared secret key",
+                              "creating hashing codes to authenticate data",
+                              "making and breaking secret codes",
+                              "creating transposition and substitution ciphers"
+                      ]
+              },
+              {
+                      "prompt": "What command is used on a switch to set the port access entity type so the interface acts only as an authenticator and will not respond to any messages meant for a supplicant?",
+                      "options": [
+                              "dot1x pae authenticator",
+                              "authentication port-control auto",
+                              "aaa authentication dot1x default group radius",
+                              "dot1x system-auth-control"
+                      ]
+              },
+              {
+                      "prompt": "What are two disadvantages of using an IDS? (Choose two.)",
+                      "options": [
+                              "The IDS does not stop malicious traffic.",
+                              "The IDS works offline using copies of network traffic.",
+                              "The IDS has no impact on traffic.",
+                              "The IDS analyzes actual forwarded packets.",
+                              "The IDS requires other devices to respond to attacks."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. The ip verify source command is applied on untrusted interfaces. Which type of attack is mitigated by using this configuration?",
+                      "options": [
+                              "DHCP spoofing",
+                              "DHCP starvation",
+                              "STP manipulation",
+                              "MAC and IP address spoofing"
+                      ]
+              },
+              {
+                      "prompt": "What ports can receive forwarded traffic from an isolated port that is part of a PVLAN?",
+                      "options": [
+                              "other isolated ports and community ports",
+                              "only promiscuous ports",
+                              "all other ports within the same community",
+                              "only isolated ports"
+                      ]
+              },
+              {
+                      "prompt": "A user complains about being locked out of a device after too many unsuccessful AAA login attempts. What could be used by the network administrator to provide a secure authentication access method without locking a user out of a device?",
+                      "options": [
+                              "Use the login delay command for authentication attempts.",
+                              "Use the login local command for authenticating user access.",
+                              "Use the aaa local authentication attempts max-fail global configuration mode command with a higher number of acceptable failures.",
+                              "Use the none keyword when configuring the authentication method list."
+                      ]
+              },
+              {
+                      "prompt": "What are two drawbacks in assigning user privilege levels on a Cisco router? (Choose two.)",
+                      "options": [
+                              "Only a root user can add or remove commands.",
+                              "Privilege levels must be set to permit access control to specific device interfaces, ports, or slots.",
+                              "Assigning a command with multiple keywords allows access to all commands using those keywords.",
+                              "Commands from a lower level are always executable at a higher level.",
+                              "AAA must be enabled."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Which conclusion can be made from the show crypto map command output that is shown on R1?",
+                      "options": [
+                              "The crypto map has not yet been applied to an interface.",
+                              "The current peer IP address should be 172.30.2.1.",
+                              "There is a mismatch between the transform sets.",
+                              "The tunnel configuration was established and can be tested with extended pings."
+                      ]
+              },
+              {
+                      "prompt": "What are two reasons to enable OSPF routing protocol authentication on a network? (Choose two.)",
+                      "options": [
+                              "to prevent data traffic from being redirected and then discarded",
+                              "to ensure faster network convergence",
+                              "to provide data security through encryption",
+                              "to prevent redirection of data traffic to an insecure link",
+                              "to ensure more efficient routing"
+                      ]
+              },
+              {
+                      "prompt": "Which three functions are provided by the syslog logging service? (Choose three.)",
+                      "options": [
+                              "gathering logging information",
+                              "authenticating and encrypting data sent over the network",
+                              "retaining captured messages on the router when a router is rebooted",
+                              "specifying where captured information is stored",
+                              "distinguishing between information to be captured and information to be ignored",
+                              "setting the size of the logging buffer"
+                      ]
+              },
+              {
+                      "prompt": "What two ICMPv6 message types must be permitted through IPv6 access control lists to allow resolution of Layer 3 addresses to Layer 2 MAC addresses? (Choose two.)",
+                      "options": [
+                              "neighbor solicitations",
+                              "echo requests",
+                              "neighbor advertisements",
+                              "echo replies",
+                              "router solicitations",
+                              "router advertisements"
+                      ]
+              },
+              {
+                      "prompt": "Which three services are provided through digital signatures? (Choose three.)",
+                      "options": [
+                              "accounting",
+                              "authenticity",
+                              "compression",
+                              "nonrepudiation",
+                              "integrity",
+                              "encryption"
+                      ]
+              },
+              {
+                      "prompt": "A technician is to document the current configurations of all network devices in a college, including those in off-site buildings. Which protocol would be best to use to securely access the network devices?",
+                      "options": [
+                              "FTP",
+                              "HTTP",
+                              "SSH",
+                              "Telnet"
+                      ]
+              },
+              {
+                      "prompt": "An administrator is trying to develop a BYOD security policy for employees that are bringing a wide range of devices to connect to the company network. Which three objectives must the BYOD security policy address? (Choose three.)",
+                      "options": [
+                              "All devices must be insured against liability if used to compromise the corporate network.",
+                              "All devices must have open authentication with the corporate network.",
+                              "Rights and activities permitted on the corporate network must be defined.",
+                              "Safeguards must be put in place for any personal device being compromised.",
+                              "The level of access of employees when connecting to the corporate network must be defined.",
+                              "All devices should be allowed to attach to the corporate network flawlessly."
+                      ]
+              },
+              {
+                      "prompt": "What is the function of the pass action on a Cisco IOS Zone-Based Policy Firewall?",
+                      "options": [
+                              "logging of rejected or dropped packets",
+                              "inspecting traffic between zones for traffic control",
+                              "tracking the state of connections between zones",
+                              "forwarding traffic from one zone to another"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Based on the security levels of the interfaces on ASA1, what traffic will be allowed on the interfaces?",
+                      "options": [
+                              "Traffic from the Internet and DMZ can access the LAN.",
+                              "Traffic from the Internet and LAN can access the DMZ.",
+                              "Traffic from the Internet can access both the DMZ and the LAN.",
+                              "Traffic from the LAN and DMZ can access the Internet."
+                      ]
+              },
+              {
+                      "prompt": "What network testing tool can be used to identify network layer protocols running on a host?",
+                      "options": [
+                              "SIEM",
+                              "Nmap",
+                              "L0phtcrack",
+                              "Tripwire"
+                      ]
+              },
+              {
+                      "prompt": "In the implementation of security on multiple devices, how do ASA ACLs differ from Cisco IOS ACLs?",
+                      "options": [
+                              "Cisco IOS routers utilize both named and numbered ACLs and Cisco ASA devices utilize only numbered ACLs.",
+                              "Cisco IOS ACLs are configured with a wildcard mask and Cisco ASA ACLs are configured with a subnet mask.",
+                              "Cisco IOS ACLs are processed sequentially from the top down and Cisco ASA ACLs are not processed sequentially.",
+                              "Cisco IOS ACLs utilize an implicit deny all and Cisco ASA ACLs end with an implicit permit all."
+                      ]
+              },
+              {
+                      "prompt": "Which statement describes an important characteristic of a site-to-site VPN?",
+                      "options": [
+                              "It must be statically set up.",
+                              "It is ideally suited for use by mobile workers.",
+                              "It requires using a VPN client on the host PC.",
+                              "After the initial connection is established, it can dynamically change connection information.",
+                              "It is commonly implemented over dialup and cable modem networks."
+                      ]
+              },
+              {
+                      "prompt": "Which two options are security best practices that help mitigate BYOD risks? (Choose two.)",
+                      "options": [
+                              "Use paint that reflects wireless signals and glass that prevents the signals from going outside the building.",
+                              "Keep the device OS and software updated.",
+                              "Only allow devices that have been approved by the corporate IT team.",
+                              "Only turn on Wi-Fi when using the wireless network.",
+                              "Decrease the wireless antenna gain level.",
+                              "Use wireless MAC address filtering."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. A network administrator configures AAA authentication on R1. Which statement describes the effect of the keyword single-connection in the configuration?",
+                      "options": [
+                              "R1 will open a separate connection to the TACACS+ server for each user authentication session.",
+                              "The authentication performance is enhanced by keeping the connection to the TACACS+ server open.",
+                              "The TACACS+ server only accepts one successful try for a user to authenticate with it.",
+                              "R1 will open a separate connection to the TACACS server on a per source IP address basis for each authentication session."
+                      ]
+              },
+              {
+                      "prompt": "A recently created ACL is not working as expected. The admin determined that the ACL had been applied inbound on the interface and that was the incorrect direction. How should the admin fix this issue?",
+                      "options": [
+                              "Delete the original ACL and create a new ACL, applying it outbound on the interface.",
+                              "Add an association of the ACL outbound on the same interface.",
+                              "Fix the ACE statements so that it works as desired inbound on the interface.",
+                              "Remove the inbound association of the ACL on the interface and reapply it outbound."
+                      ]
+              },
+              {
+                      "prompt": "What characteristic of the Snort term-based subscriptions is true for both the community and the subscriber rule sets?",
+                      "options": [
+                              "Both have a 30-day delayed access to updated signatures.",
+                              "Both use Cisco Talos to provide coverage in advance of exploits.",
+                              "Both are fully supported by Cisco and include Cisco customer support.",
+                              "Both offer threat protection against security threats."
+                      ]
+              },
+              {
+                      "prompt": "A security analyst is configuring Snort IPS. The analyst has just downloaded and installed the Snort OVA file. What is the next step?",
+                      "options": [
+                              "Verify Snort IPS.",
+                              "Configure Virtual Port Group interfaces.",
+                              "Enable IPS globally or on desired interfaces.",
+                              "Activate the virtual services."
+                      ]
+              },
+              {
+                      "prompt": "The security policy in a company specifies that employee workstations can initiate HTTP and HTTPS connections to outside websites and the return traffic is allowed. However, connections initiated from outside hosts are not allowed. Which parameter can be used in extended ACLs to meet this requirement?",
+                      "options": [
+                              "dscp",
+                              "precedence",
+                              "eq",
+                              "established"
+                      ]
+              },
+              {
+                      "prompt": "A researcher is comparing the differences between a stateless firewall and a proxy firewall. Which two additional layers of the OSI model are inspected by a proxy firewall? (Choose two.)",
+                      "options": [
+                              "Layer 3",
+                              "Layer 4",
+                              "Layer 5",
+                              "Layer 6",
+                              "Layer 7"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Which statement is true about the effect of this Cisco IOS zone-based policy firewall configuration?",
+                      "options": [
+                              "The firewall will automatically drop all HTTP, HTTPS, and FTP traffic.",
+                              "The firewall will automatically allow HTTP, HTTPS, and FTP traffic from s0/0/0 to g0/0 and will track the connections. Tracking the connection allows only return traffic to be permitted through the firewall in the opposite direction.",
+                              "The firewall will automatically allow HTTP, HTTPS, and FTP traffic from s0/0/0 to g0/0, but will not track the state of connections. A corresponding policy must be applied to allow return traffic to be permitted through the firewall in the opposite direction.",
+                              "The firewall will automatically allow HTTP, HTTPS, and FTP traffic from g0/0 to s0/0/0 and will track the connections. Tracking the connection allows only return traffic to be permitted through the firewall in the opposite direction.",
+                              "return traffic to be permitted through the firewall in the opposite direction.",
+                              "The firewall will automatically allow HTTP, HTTPS, and FTP traffic from g0/0 to s0/0/0, but will not track the state of connections. A corresponding policy must be applied to allow return traffic to be permitted through the firewall in the opposite direction."
+                      ]
+              },
+              {
+                      "prompt": "Which privilege level has the most access to the Cisco IOS?",
+                      "options": [
+                              "level 0",
+                              "level 15",
+                              "level 7",
+                              "level 16",
+                              "level 1"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. A network administrator has configured NAT on an ASA device. What type of NAT is used?",
+                      "options": [
+                              "inside NAT",
+                              "static NAT",
+                              "bidirectional NAT",
+                              "outside NAT"
+                      ]
+              },
+              {
+                      "prompt": "A network analyst is configuring a site-to-site IPsec VPN. The analyst has configured both the ISAKMP and IPsec policies. What is the next step?",
+                      "options": [
+                              "Configure the hash as SHA and the authentication as pre-shared.",
+                              "Apply the crypto map to the appropriate outbound interfaces.",
+                              "Issue the show crypto ipsec sa command to verify the tunnel.",
+                              "Verify that the security feature is enabled in the IOS."
+                      ]
+              },
+              {
+                      "prompt": "When an inbound Internet-traffic ACL is being implemented, what should be included to prevent the spoofing of internal networks?",
+                      "options": [
+                              "ACEs to prevent traffic from private address spaces",
+                              "ACEs to prevent broadcast address traffic",
+                              "ACEs to prevent ICMP traffic",
+                              "ACEs to prevent HTTP traffic",
+                              "ACEs to prevent SNMP traffic"
+                      ]
+              },
+              {
+                      "prompt": "Which Cisco solution helps prevent ARP spoofing and ARP poisoning attacks?",
+                      "options": [
+                              "Dynamic ARP Inspection",
+                              "IP Source Guard",
+                              "DHCP Snooping",
+                              "Port Security"
+                      ]
+              },
+              {
+                      "prompt": "When the Cisco NAC appliance evaluates an incoming connection from a remote device against the defined network policies, what feature is being used?",
+                      "options": [
+                              "posture assessment",
+                              "remediation of noncompliant systems",
+                              "authentication and authorization",
+                              "quarantining of noncompliant systems"
+                      ]
+              },
+              {
+                      "prompt": "Which two steps are required before SSH can be enabled on a Cisco router? (Choose two.)",
+                      "options": [
+                              "Give the router a host name and domain name.",
+                              "Create a banner that will be displayed to users when they connect.",
+                              "Generate a set of secret keys to be used for encryption and decryption.",
+                              "Set up an authentication server to handle incoming connection requests.",
+                              "Enable SSH on the physical interfaces where the incoming connection requests will be received."
+                      ]
+              },
+              {
+                      "prompt": "The network administrator for an e-commerce website requires a service that prevents customers from claiming that legitimate orders are fake. What service provides this type of guarantee?",
+                      "options": [
+                              "confidentiality",
+                              "authentication",
+                              "integrity",
+                              "nonrepudiation"
+                      ]
+              },
+              {
+                      "prompt": "Which three statements are generally considered to be best practices in the placement of ACLs? (Choose three.)",
+                      "options": [
+                              "Filter unwanted traffic before it travels onto a low-bandwidth link.",
+                              "Place standard ACLs close to the destination IP address of the traffic.",
+                              "Place standard ACLs close to the source IP address of the traffic.",
+                              "Place extended ACLs close to the destination IP address of the traffic.",
+                              "Place extended ACLs close to the source IP address of the traffic.",
+                              "For every inbound ACL placed on an interface, there should be a matching outbound ACL."
+                      ]
+              },
+              {
+                      "prompt": "What function is performed by the class maps configuration object in the Cisco modular policy framework?",
+                      "options": [
+                              "identifying interesting traffic",
+                              "applying a policy to an interface",
+                              "applying a policy to interesting traffic",
+                              "restricting traffic through an interface"
+                      ]
+              },
+              {
+                      "prompt": "What two assurances does digital signing provide about code that is downloaded from the Internet? (Choose two.)",
+                      "options": [
+                              "The code is authentic and is actually sourced by the publisher.",
+                              "The code contains no errors.",
+                              "The code has not been modified since it left the software publisher.",
+                              "The code contains no viruses.",
+                              "The code was encrypted with both a private and public key."
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. What algorithm is being used to provide public key exchange?",
+                      "options": [
+                              "SHA",
+                              "RSA",
+                              "Diffie-Hellman",
+                              "AES"
+                      ]
+              },
+              {
+                      "prompt": "Which two statements describe the use of asymmetric algorithms? (Choose two.)",
+                      "options": [
+                              "Public and private keys may be used interchangeably.",
+                              "If a public key is used to encrypt the data, a public key must be used to decrypt the data.",
+                              "If a private key is used to encrypt the data, a public key must be used to decrypt the data.",
+                              "If a public key is used to encrypt the data, a private key must be used to decrypt the data.",
+                              "If a private key is used to encrypt the data, a private key must be used to decrypt the data."
+                      ]
+              },
+              {
+                      "prompt": "Which statement is a feature of HMAC?",
+                      "options": [
+                              "HMAC uses a secret key that is only known to the sender and defeats man-in-the-middle attacks.",
+                              "HMAC uses protocols such as SSL or TLS to provide session layer confidentiality.",
+                              "HMAC uses a secret key as input to the hash function, adding authentication to integrity assurance.",
+                              "HMAC is based on the RSA hash function."
+                      ]
+              },
+              {
+                      "prompt": "What is the purpose of the webtype ACLs in an ASA?",
+                      "options": [
+                              "to inspect outbound traffic headed towards certain web sites",
+                              "to restrict traffic that is destined to an ASDM",
+                              "to monitor return traffic that is in response to web server requests that are initiated from the inside interface",
+                              "to filter traffic for clientless SSL VPN users"
+                      ]
+              },
+              {
+                      "prompt": "Which two statements describe the effect of the access control list wildcard mask 0.0.0.15? (Choose two.)",
+                      "options": [
+                              "The first 28 bits of a supplied IP address will be matched.",
+                              "The last four bits of a supplied IP address will be matched.",
+                              "The first 28 bits of a supplied IP address will be ignored.",
+                              "The last four bits of a supplied IP address will be ignored.",
+                              "The last five bits of a supplied IP address will be ignored.",
+                              "The first 32 bits of a supplied IP address will be matched."
+                      ]
+              },
+              {
+                      "prompt": "Which type of firewall is the most common and allows or blocks traffic based on Layer 3, Layer 4, and Layer 5 information?",
+                      "options": [
+                              "stateless firewall",
+                              "packet filtering firewall",
+                              "next generation firewall",
+                              "stateful firewall"
+                      ]
+              },
+              {
+                      "prompt": "Which protocol or measure should be used to mitigate the vulnerability of using FTP to transfer documents between a teleworker and the company file server?",
+                      "options": [
+                              "SCP",
+                              "TFTP",
+                              "ACLs on the file server",
+                              "out-of-band communication channel"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. The IPv6 access list LIMITED_ACCESS is applied on the S0/0/0 interface of R1 in the inbound direction. Which IPv6 packets from the ISP will be dropped by the ACL on R1?",
+                      "options": [
+                              "HTTPS packets to PC1",
+                              "ICMPv6 packets that are destined to PC1",
+                              "packets that are destined to PC1 on port 80",
+                              "neighbor advertisements that are received from the ISP router"
+                      ]
+              },
+              {
+                      "prompt": "What tool is available through the Cisco IOS CLI to initiate security audits and to make recommended configuration changes with or without administrator input?",
+                      "options": [
+                              "Control Plane Policing",
+                              "Cisco AutoSecure",
+                              "Cisco ACS",
+                              "Simple Network Management Protocol"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Which pair of crypto isakmp key commands would correctly configure PSK on the two routers?",
+                      "options": [
+                              "R1(config)# crypto isakmp key cisco123 address 209.165.200.227 R2(config)# crypto isakmp key cisco123 address 209.165.200.226",
+                              "R1(config)# crypto isakmp key cisco123 address 209.165.200.226 R2(config)# crypto isakmp key cisco123 address 209.165.200.227",
+                              "R1(config)# crypto isakmp key cisco123 hostname R1 R2(config)# crypto isakmp key cisco123 hostname R2",
+                              "R1(config)# crypto isakmp key cisco123 address 209.165.200.226 R2(config)# crypto isakmp key secure address 209.165.200.227"
+                      ]
+              },
+              {
+                      "prompt": "Which two technologies provide enterprise-managed VPN solutions? (Choose two.)",
+                      "options": [
+                              "Layer 3 MPLS VPN",
+                              "Frame Relay",
+                              "site-to-site VPN",
+                              "Layer 2 MPLS VPN",
+                              "remote access VPN"
+                      ]
+              },
+              {
+                      "prompt": "What are the three components of an STP bridge ID? (Choose three.)",
+                      "options": [
+                              "the date and time that the switch was brought online",
+                              "the hostname of the switch",
+                              "the MAC address of the switch",
+                              "the extended system ID",
+                              "the bridge priority value",
+                              "the IP address of the management VLAN"
+                      ]
+              },
+              {
+                      "prompt": "What are two differences between stateful and packet filtering firewalls? (Choose two.)",
+                      "options": [
+                              "A packet filtering firewall will prevent spoofing by determining whether packets belong to an existing connection while a stateful firewall follows pre-configured rule sets.",
+                              "A stateful firewall provides more stringent control over security than a packet filtering firewall.",
+                              "A packet filtering firewall is able to filter sessions that use dynamic port negotiations while a stateful firewall cannot.",
+                              "A stateful firewall will provide more logging information than a packet filtering firewall.",
+                              "A statefull firewall will examine each packet individually while a packet filtering firewall observes the state of a connection."
+                      ]
+              },
+              {
+                      "prompt": "What port state is used by 802.1X if a workstation fails authorization?",
+                      "options": [
+                              "disabled",
+                              "down",
+                              "unauthorized",
+                              "blocking"
+                      ]
+              },
+              {
+                      "prompt": "Refer to the exhibit. Which two ACLs, if applied to the G0/1 interface of R2, would permit only the two LAN networks attached to R1 to access the network that connects to R2 G0/1 interface? (Choose two.)",
+                      "options": [
+                              "access-list 3 permit 192.168.10.128 0.0.0.63",
+                              "access-list 1 permit 192.168.10.0 0.0.0.127",
+                              "access-list 4 permit 192.168.10.0 0.0.0.255",
+                              "access-list 2 permit host 192.168.10.9 access-list 2 permit host 192.168.10.69",
+                              "access-list 5 permit 192.168.10.0 0.0.0.63 access-list 5 permit 192.168.10.64 0.0.0.63"
+                      ]
+              },
+              {
+                      "prompt": "Which two characteristics apply to role-based CLI access superviews? (Choose two.)",
+                      "options": [
+                              "A specific superview cannot have commands added to it directly.",
+                              "CLI views have passwords, but superviews do not have passwords.",
+                              "A single superview can be shared among multiple CLI views.",
+                              "Deleting a superview deletes all associated CLI views.",
+                              "Users logged in to a superview can access all commands specified within the associated CLI views."
+                      ]
+              },
+              {
+                      "prompt": "What are two security features commonly found in a WAN design? (Choose two.)",
+                      "options": [
+                              "WPA2 for data encryption of all data between sites",
+                              "firewalls protecting the main and remote sites",
+                              "outside perimeter security including continuous video surveillance",
+                              "port security on all user-facing ports",
+                              "VPNs used by mobile workers between sites"
+                      ]
+              }
+      ]
+
+      // Build the nested shadow-DOM tree the extension expects.
+      function mkComponent(tag, parentShadow) {
+        const el = document.createElement(tag)
+        const sr = el.attachShadow({ mode: "open" })
+        parentShadow.appendChild(el)
+        return { el, sr }
+      }
+
+      function buildMcq(blockShadow, q) {
+        const mcq = document.createElement("mcq-view")
+        const mcqSr = mcq.attachShadow({ mode: "open" })
+        blockShadow.appendChild(mcq)
+
+        const baseView = document.createElement("base-view")
+        baseView.setAttribute("type", "component")
+        const baseSr = baseView.attachShadow({ mode: "open" })
+        mcqSr.appendChild(baseView)
+
+        // Style the option items inside the mcq shadow root.
+        const style = document.createElement("style")
+        style.textContent = `
+          .mcq__prompt { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+          .mcq__items { list-style: none; padding: 0; margin: 0; }
+          .mcq__item { margin: 6px 0; }
+          .mcq__item-label {
+            display: flex; align-items: center;
+            padding: 12px 16px;
+            border: 1px solid #d6d6d6; border-radius: 6px;
+            cursor: pointer;
+            background: #fff;
+            transition: background 120ms ease;
+          }
+          .mcq__item-label:hover { background: #f7f7f7; }
+          .mcq__item-label input { margin-right: 12px; }
+        `
+        mcqSr.appendChild(style)
+
+        const promptEl = document.createElement("div")
+        promptEl.className = "mcq__prompt"
+        promptEl.textContent = q.prompt
+        baseSr.appendChild(promptEl)
+
+        // Multi-answer questions (e.g. "Choose two", "Choose three") use checkboxes;
+        // single-answer questions share one radio group so picking one un-picks the rest.
+        const multi = /choose (?:two|three|four|five|all that apply)/i.test(q.prompt)
+        const groupName = "q-" + Math.random().toString(36).slice(2, 9)
+
+        const list = document.createElement("ul")
+        list.className = "mcq__items"
+        q.options.forEach((opt, i) => {
+          const li = document.createElement("li")
+          li.className = "mcq__item"
+          const label = document.createElement("label")
+          label.className = "mcq__item-label js-item-label"
+          const input = document.createElement("input")
+          input.type = multi ? "checkbox" : "radio"
+          input.name = groupName
+          input.value = String(i)
+          const span = document.createElement("span")
+          span.textContent = opt
+          label.appendChild(input)
+          label.appendChild(span)
+          li.appendChild(label)
+          list.appendChild(li)
+        })
+        mcqSr.appendChild(list)
+      }
+
+      // Matching questions — items have a fixed title and a <select> with the shared option pool.
+      const MATCHING_QUESTIONS = [
+        {
+          prompt: "Match the type of ASA ACLs to the description. (Not all options are used.)",
+          items: [
+            "extended access lists",
+            "webtype access lists",
+            "standard access lists",
+            "EtherType access lists",
+          ],
+          optionPool: [
+            "used to specify source and destination addresses and protocol, ports, or the ICMP type",
+            "used to support filtering for clientless SSL VPN",
+            "used to identify the destination IP addresses only",
+            "used only if the security appliance is running in transparent mode",
+          ],
+        },
+        {
+          prompt: "Match the network monitoring technology with the description.",
+          items: [
+            "passively monitors network traffic",
+            "uses VLANs to monitor traffic on remote switches",
+            "a passive traffic splitting device implemented inline between a device of interest and the network",
+            "can perform a packet drop to stop the trigger packets",
+          ],
+          optionPool: ["IDS", "RSPAN", "TAP", "IPS"],
+        },
+        {
+          prompt: "Match each SNMP operation to the corresponding description. (Not all options are used.)",
+          items: [
+            "set-request",
+            "get-bulk-request",
+            "get-next-request",
+            "get-response",
+          ],
+          optionPool: [
+            "storing a value in a specific variable",
+            "retrieving multiple rows in a table in a single transmission",
+            "sequentially searching tables to retrieve a value from a variable",
+            "replying to GET request and SET request messages that are sent by an NMS",
+          ],
+        },
+        {
+          prompt: "Match the IPS alarm type to the description.",
+          items: ["true negative", "false positive", "true positive", "false negative"],
+          optionPool: [
+            "normal user traffic is not generating an alarm",
+            "normal user traffic is generating an alarm",
+            "verified attack traffic is generating an alarm",
+            "attack traffic is not generating an alarm",
+          ],
+        },
+      ]
+
+      // Real NetAcad shape: <matching-view> shadow contains <base-view> (prompt) and
+      // .matching__widget with nested <matching-dropdown-view> rows. Each row's shadow
+      // contains a custom dropdown built from .dropdown__btn + .dropdown__list > .dropdown__item.
+      function buildMatchingDropdownRow(rowEl, itemText, optionPool) {
+        const rowSr = rowEl.attachShadow({ mode: "open" })
+
+        const style = document.createElement("style")
+        style.textContent = `
+          .matching__item-container-options-wrapper {
+            display: flex; align-items: center; gap: 16px;
+            padding: 10px 14px; margin: 6px 0;
+            border: 1px solid #d6d6d6; border-radius: 6px;
+            background: #fff;
+          }
+          .matching__item-title {
+            flex: 0 0 260px; font-weight: 500;
+          }
+          .matching__item-title_inner { display: inline; }
+          .matching__select-container { position: relative; flex: 1; }
+          .dropdown__btn {
+            width: 100%; text-align: left;
+            padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px;
+            background: #fafafa; cursor: pointer; font: inherit;
+            display: flex; justify-content: space-between; align-items: center;
+          }
+          .dropdown__btn:hover { background: #f0f0f0; }
+          .dropdown__icon { opacity: 0.6; }
+          .dropdown__list {
+            position: absolute; top: 100%; left: 0; right: 0;
+            list-style: none; margin: 4px 0 0; padding: 4px 0;
+            background: #fff; border: 1px solid #ccc; border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08); z-index: 10;
+          }
+          .dropdown__list.hidden { display: none; }
+          .dropdown__item { cursor: pointer; }
+          .dropdown__item-inner { padding: 8px 12px; }
+          .dropdown__item-inner:hover { background: #eef6ff; }
+        `
+        rowSr.appendChild(style)
+
+        const wrapper = document.createElement("div")
+        wrapper.className = "matching__item-container-options-wrapper"
+
+        const titleOuter = document.createElement("div")
+        titleOuter.className = "matching__item-title"
+        const titleInner = document.createElement("div")
+        titleInner.className = "matching__item-title_inner"
+        titleInner.textContent = itemText
+        titleOuter.appendChild(titleInner)
+        wrapper.appendChild(titleOuter)
+
+        const selectContainer = document.createElement("div")
+        selectContainer.className = "matching__select-container"
+
+        const btn = document.createElement("button")
+        btn.className = "dropdown__btn js-dropdown-btn"
+        btn.setAttribute("aria-haspopup", "listbox")
+        btn.setAttribute("aria-expanded", "false")
+        const btnInner = document.createElement("div")
+        btnInner.className = "dropdown__inner js-dropdown-inner"
+        btnInner.textContent = "Please select an option"
+        const btnIcon = document.createElement("div")
+        btnIcon.className = "dropdown__icon"
+        btnIcon.textContent = "▾"
+        btn.appendChild(btnInner)
+        btn.appendChild(btnIcon)
+
+        const list = document.createElement("ul")
+        list.className = "dropdown__list js-dropdown-list hidden"
+        list.setAttribute("role", "list")
+        optionPool.forEach((opt, i) => {
+          const li = document.createElement("li")
+          li.className = "dropdown__item js-dropdown-list-item"
+          li.setAttribute("role", "option")
+          li.setAttribute("data-index", String(i))
+          const inner = document.createElement("div")
+          inner.className = "dropdown__item-inner js-dropdown-list-item-inner"
+          inner.setAttribute("role", "button")
+          inner.setAttribute("value", opt)
+          inner.textContent = opt
+          li.appendChild(inner)
+          list.appendChild(li)
+        })
+
+        btn.addEventListener("click", () => {
+          const open = list.classList.toggle("hidden") === false
+          btn.setAttribute("aria-expanded", String(open))
+        })
+        list.addEventListener("click", (e) => {
+          const li = e.target.closest(".dropdown__item")
+          if (!li) return
+          const inner = li.querySelector(".dropdown__item-inner")
+          if (inner) btnInner.textContent = inner.textContent
+          list.classList.add("hidden")
+          btn.setAttribute("aria-expanded", "false")
+        })
+
+        selectContainer.appendChild(btn)
+        selectContainer.appendChild(list)
+        wrapper.appendChild(selectContainer)
+        rowSr.appendChild(wrapper)
+      }
+
+      function buildMatching(blockShadow, q) {
+        const mv = document.createElement("matching-view")
+        const mvSr = mv.attachShadow({ mode: "open" })
+        blockShadow.appendChild(mv)
+
+        // Prompt lives inside base-view's shadow root.
+        const baseView = document.createElement("base-view")
+        baseView.setAttribute("type", "component")
+        const baseSr = baseView.attachShadow({ mode: "open" })
+        const baseStyle = document.createElement("style")
+        baseStyle.textContent = `
+          .component__body-inner { font-size: 16px; font-weight: 600; margin: 16px 0 12px; }
+        `
+        baseSr.appendChild(baseStyle)
+        const promptEl = document.createElement("div")
+        promptEl.className = "component__body-inner matching__body-inner"
+        promptEl.textContent = q.prompt
+        baseSr.appendChild(promptEl)
+        mvSr.appendChild(baseView)
+
+        // Each row is a <matching-dropdown-view> with its own shadow root.
+        const widget = document.createElement("div")
+        widget.className = "component__widget matching__widget"
+        q.items.forEach((itemText, idx) => {
+          const row = document.createElement("matching-dropdown-view")
+          row.className = "matching__item_main"
+          row.setAttribute("index", String(idx))
+          row.setAttribute("placeholder", "Please select an option")
+          widget.appendChild(row)
+          buildMatchingDropdownRow(row, itemText, q.optionPool)
+        })
+        mvSr.appendChild(widget)
+      }
+
+      const appRoot = document.querySelector("app-root")
+      const appSr = appRoot.attachShadow({ mode: "open" })
+
+      const pageView = document.createElement("page-view")
+      const pageSr = pageView.attachShadow({ mode: "open" })
+      appSr.appendChild(pageView)
+
+      // CSS lives inside the shadow root because article-views are shadow children
+      // — light-DOM rules can't reach them.
+      const pageStyle = document.createElement("style")
+      pageStyle.textContent = `
+        article-view { display: none; }
+        article-view.current { display: block; }
+      `
+      pageSr.appendChild(pageStyle)
+
+      const allArticles = []
+      function addBlock(builder, q) {
+        const articleView = document.createElement("article-view")
+        const articleSr = articleView.attachShadow({ mode: "open" })
+        pageSr.appendChild(articleView)
+
+        const blockView = document.createElement("block-view")
+        const blockSr = blockView.attachShadow({ mode: "open" })
+        articleSr.appendChild(blockView)
+
+        builder(blockSr, q)
+        allArticles.push(articleView)
+        return articleView
+      }
+
+      MATCHING_QUESTIONS.forEach((q) => addBlock(buildMatching, q))
+      SAMPLE_QUESTIONS.forEach((q) => addBlock(buildMcq, q))
+
+      // ----- One-question-at-a-time navigation -----
+      const total = allArticles.length
+      let currentIdx = 0
+
+      const navEl = document.getElementById("quizNav")
+      const prevBtn = document.getElementById("prevBtn")
+      const nextBtn = document.getElementById("nextBtn")
+      const counterEl = document.getElementById("counter")
+
+      const navButtons = []
+      for (let i = 0; i < total; i++) {
+        const b = document.createElement("button")
+        b.type = "button"
+        b.textContent = "Q" + (i + 1)
+        b.addEventListener("click", () => showQuestion(i))
+        navEl.appendChild(b)
+        navButtons.push(b)
+      }
+
+      function showQuestion(idx) {
+        if (idx < 0 || idx >= total) return
+        currentIdx = idx
+        allArticles.forEach((a, i) => a.classList.toggle("current", i === idx))
+        navButtons.forEach((b, i) => b.classList.toggle("current", i === idx))
+        counterEl.textContent = `Question ${idx + 1} of ${total}`
+        prevBtn.disabled = idx === 0
+        nextBtn.disabled = idx === total - 1
+        navButtons[idx].scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" })
+        // Re-trigger the extension to process the now-visible question.
+        if (typeof window.scrapeData === "function") {
+          window.scrapeData()
+        }
+      }
+
+      prevBtn.addEventListener("click", () => showQuestion(currentIdx - 1))
+      nextBtn.addEventListener("click", () => showQuestion(currentIdx + 1))
+
+      showQuestion(0)
+    </script>
+  </body>
+</html>
